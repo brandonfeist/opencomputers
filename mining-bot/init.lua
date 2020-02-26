@@ -4,6 +4,15 @@ local robot = require('robot')
 local sides = require('sides')
 local serialization = require('serialization')
 
+local states = {
+  ["ERROR"] = "ERROR",
+  ["CALIBRATING"] = "CALIBRATING",
+  ["MINING"] = "MINING",
+  ["SOLAR"] = "SOLAR",
+  ["GO_HOME"] = "GO_HOME",
+  ["HOME"] = "HOME"
+}
+
 local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
@@ -34,7 +43,7 @@ local crafting = add_component('crafting')
 local geolyzer = add_component('geolyzer')
 local modem = add_component('modem')
 local inventorySize = robot.inventorySize()
-local energyLevel, hasSolar, state
+local energyLevel, hasSolar
 
 -- Functions --
 checkEnergyLevel = function()
@@ -48,7 +57,11 @@ sleep = function(timeout)
   until computer.uptime() >= deadline
 end
 
-report = function(message, stop)
+report = function(message, state, stop)
+  if stop do
+    state = states["ERROR"]
+  end
+
   if modem then
     stateTable = {
       ["state"]=state,
@@ -122,7 +135,7 @@ step = function(side, ignore)
       X = X + 1
     end
   else
-    report('Invalid step side given', true)
+    report('Invalid step side given', states["ERROR"], true)
     return false
   end
 
@@ -167,20 +180,22 @@ calibrateDirection = function()
     end
   end
   if not D then
-    repot('Direction calibration error', true)
+    report('Direction calibration error', states["ERROR"], true)
   end
 end
 
 calibration = function()
+  report('Calibrating...', states["CALIBRATING"], false)
+
   -- Check for essential components --
   if not controller then
-    report('Inventory controller not detected', true)
+    report('Inventory controller not detected', states["ERROR"], true)
   elseif not geolyzer then
-    report('Geolyzer not detected', true)
+    report('Geolyzer not detected', states["ERROR"], true)
   elseif not robot.detectDown() then
-    report('Bottom solid block is not detected', true)
+    report('Bottom solid block is not detected', states["ERROR"], true)
   elseif robot.durability() == nil then
-    report('There is no suitable tool in the manipulator', true)
+    report('There is no suitable tool in the manipulator', states["ERROR"], true)
   end
 
   -- Check and set solar and modem --
@@ -205,6 +220,8 @@ calibration = function()
   calibrateEnergyUse()
   calibrateWearRate()
   calibrateDirection()
+
+  report('Calibration completed', states["MINING"], false)
 end
 
 main = function()
