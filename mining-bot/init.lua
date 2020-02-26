@@ -13,13 +13,18 @@ local states = {
   HOME = "HOME"
 }
 
+-- Configuration Variables --
 local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
+
+-- Tracking Variables --
 local X, Y, Z, D, border = 0, 0, 0, 0
 local steps, turns = 0, 0
 local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
+local energyLevel = 0
+local hasSolar = false
 
 -- Takes an array and turns it into an associative array
 local function arrToTable(table)
@@ -43,7 +48,6 @@ local crafting = add_component('crafting')
 local geolyzer = add_component('geolyzer')
 local modem = add_component('modem')
 local inventorySize = robot.inventorySize()
-local energyLevel, hasSolar
 
 -- Functions --
 local function checkEnergyLevel()
@@ -221,7 +225,7 @@ local function calibration()
       break
     end
   end
-  
+
   calibrateEnergyUse()
   calibrateWearRate()
   calibrateDirection()
