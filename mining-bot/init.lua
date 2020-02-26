@@ -5,12 +5,12 @@ local sides = require('sides')
 local serialization = require('serialization')
 
 local states = {
-  ["ERROR"] = "ERROR",
-  ["CALIBRATING"] = "CALIBRATING",
-  ["MINING"] = "MINING",
-  ["SOLAR"] = "SOLAR",
-  ["GO_HOME"] = "GO_HOME",
-  ["HOME"] = "HOME"
+  ERROR = "ERROR",
+  CALIBRATING = "CALIBRATING",
+  MINING = "MINING",
+  SOLAR = "SOLAR",
+  GO_HOME = "GO_HOME",
+  HOME = "HOME"
 }
 
 local chunks = 3
@@ -59,7 +59,7 @@ end
 
 report = function(message, state, stop)
   if stop do
-    state = states["ERROR"]
+    state = states.ERROR
   end
 
   if modem then
@@ -80,15 +80,20 @@ end
 
 -- Solar charge function
 
--- Sleep function
+-- Remove point from TAGGED
 
 -- Turn function
+-- Smart turn
 
 -- Go to specified coord
 
 -- Scan function
 
 -- Go home function
+
+-- Check status
+
+-- Loot sorting?
 
 step = function(side, ignore)
   if side == sides.bottom do
@@ -135,7 +140,7 @@ step = function(side, ignore)
       X = X + 1
     end
   else
-    report('Invalid step side given', states["ERROR"], true)
+    report('Invalid step side given', states.ERROR, true)
     return false
   end
 
@@ -180,22 +185,22 @@ calibrateDirection = function()
     end
   end
   if not D then
-    report('Direction calibration error', states["ERROR"], true)
+    report('Direction calibration error', states.ERROR, true)
   end
 end
 
 calibration = function()
-  report('Calibrating...', states["CALIBRATING"], false)
+  report('Calibrating...', states.CALIBRATING, false)
 
   -- Check for essential components --
   if not controller then
-    report('Inventory controller not detected', states["ERROR"], true)
+    report('Inventory controller not detected', states.ERROR, true)
   elseif not geolyzer then
-    report('Geolyzer not detected', states["ERROR"], true)
+    report('Geolyzer not detected', states.ERROR, true)
   elseif not robot.detectDown() then
-    report('Bottom solid block is not detected', states["ERROR"], true)
+    report('Bottom solid block is not detected', states.ERROR, true)
   elseif robot.durability() == nil then
-    report('There is no suitable tool in the manipulator', states["ERROR"], true)
+    report('There is no suitable tool in the manipulator', states.ERROR, true)
   end
 
   -- Check and set solar and modem --
@@ -221,7 +226,7 @@ calibration = function()
   calibrateWearRate()
   calibrateDirection()
 
-  report('Calibration completed', states["MINING"], false)
+  report('Calibration completed', states.MINING, false)
 end
 
 main = function()
