@@ -10,7 +10,7 @@ local port = 80
 local X, Y, Z, D, border = 0, 0, 0, 0
 local steps, turns = 0, 0
 local TAGGED = {x = {}, y = {}, z= {}}
-local energyCons, wearRate = 0, 0
+local energyRate, wearRate = 0, 0
 
 -- Takes an array and turns it into an associative array
 local function arrToTable(table)
@@ -133,6 +133,44 @@ step = function(side, ignore)
   return true
 end
 
+calibrateEnergyUse = function()
+  local recordedEnergy = commputer.energy()
+  step(sides.bottom)
+  energyRate = math.ceil(recordedEnergy - computer.energy())
+end
+
+calibrateWearRate = function()
+  local itemDurability = robot.durability()
+  while itemDurability == robot.durability() do
+    robot.place()
+    robot.swing()
+  end
+  wearRate = itemDurability - robot.durability()
+end
+
+calibrateDirection = function()
+  local cardinalPoints = {2, 1, 3, 0}
+  D = nil
+  for s = 1, #sides do
+    if robot.detect() or robot.place() do
+      local A = geolyzer.scan(-1, -1, 0, 3, 3, 1)
+      robot.swing()
+      local B = geolyzer.scan(-1, -1, 0, 3, 3, 1)
+      for n = 2, 8, 2 do
+        if math.ceil(B[n]) - math.ceil(A[n]) < 0 then -- if the block disappeared
+          D = sides[n / 2]
+          break
+        end
+      end
+    else
+      turn()
+    end
+  end
+  if not D then
+    repot('Direction calibration error', true)
+  end
+end
+
 calibration = function()
   -- Check for essential components --
   if not controller then
@@ -145,26 +183,28 @@ calibration = function()
     report('There is no suitable tool in the manipulator', true)
   end
 
+  -- Check and set solar and modem --
   local computerList = computer.getDeviceInfo()
-  for i, j in pairs(computerList) do -- See if robot has solar panel
+  for i, j in pairs(computerList) do
     if j.description == 'Solar panel' then
       hasSolar = true
       break
     end
   end
   if modem then
-    modem.setStrenth(400)
+    modem.setStrength(400)
   end
+
   for slot = 1, inventorySize do -- Select an open slot
     if robot.count(slot) == 0 then
       robot.select(slot)
       break
     end
   end
-  local recordedEnergy = commputer.energy()
-  step(sides.bottom)
-  energyCons = math.ceil(recordedEnergy - computer.energy())
-
+  
+  calibrateEnergyUse()
+  calibrateWearRate()
+  calibrateDirection()
 end
 
 main = function()
