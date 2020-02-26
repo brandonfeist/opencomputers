@@ -46,29 +46,29 @@ local inventorySize = robot.inventorySize()
 local energyLevel, hasSolar
 
 -- Functions --
-checkEnergyLevel = function()
+local function checkEnergyLevel()
   return computer.energy() / computer.maxEnergy()
 end
 
-sleep = function(timeout)
+local function sleep(timeout)
   local deadline = computer.uptime() + timeout
   repeat
     computer.pullSignal(timeout)
   until computer.uptime() >= deadline
 end
 
-report = function(message, state, stop)
-  if stop do
+local function report(message, state, stop)
+  if stop then
     state = states.ERROR
   end
 
   if modem then
-    stateTable = {
-      ["state"]=state,
-      ["position"]=X..', '..Y..', '..Z..': Direct: '..D
-      ["message"]=message
-      ["energy"]=checkEnergyLevel()
-      ["timestamp"]=os.clock()
+    local stateTable = {
+      state = state,
+      position = X..', '..Y..', '..Z..': Direct: '..D,
+      message = message,
+      energy = checkEnergyLevel(),
+      timestamp = os.clock()
     }
     modem.send(address, port, serialization.serialize(stateTable))
   end
@@ -95,9 +95,9 @@ end
 
 -- Loot sorting?
 
-step = function(side, ignore)
-  if side == sides.bottom do
-    local result, obstacle = robot.swingDown()
+local function step(side, ignore)
+  if side == sides.bottom then
+    local swingSuccess, block = robot.swingDown()
     if not swingSuccess and block ~= 'air' and robot.detectDown() then
       return false
     else
@@ -107,8 +107,8 @@ step = function(side, ignore)
     steps = steps + 1
     robot.down()
     Y = Y - 1
-  elseif side == sides.top do
-    local result, obstacle = robot.swingUp()
+  elseif side == sides.top then
+    local swingSuccess, block = robot.swingUp()
     if not swingSuccess and block ~= 'air' and robot.detectUp() then
       return false
     else
@@ -119,8 +119,8 @@ step = function(side, ignore)
     steps = steps + 1
     robot.up()
     Y = Y + 1
-  elseif side == sides.front do
-    local result, obstacle = robot.swing()
+  elseif side == sides.front then
+    local swingSuccess, block = robot.swing()
     if not swingSuccess and block ~= 'air' and robot.detect() then
       return false
     else
@@ -151,13 +151,13 @@ step = function(side, ignore)
   return true
 end
 
-calibrateEnergyUse = function()
-  local recordedEnergy = commputer.energy()
+local function calibrateEnergyUse()
+  local recordedEnergy = computer.energy()
   step(sides.bottom)
   energyRate = math.ceil(recordedEnergy - computer.energy())
 end
 
-calibrateWearRate = function()
+local function calibrateWearRate()
   local itemDurability = robot.durability()
   while itemDurability == robot.durability() do
     robot.place()
@@ -166,11 +166,11 @@ calibrateWearRate = function()
   wearRate = itemDurability - robot.durability()
 end
 
-calibrateDirection = function()
+local function calibrateDirection()
   local cardinalPoints = {2, 1, 3, 0}
   D = nil
   for s = 1, #sides do
-    if robot.detect() or robot.place() do
+    if robot.detect() or robot.place() then
       local A = geolyzer.scan(-1, -1, 0, 3, 3, 1)
       robot.swing()
       local B = geolyzer.scan(-1, -1, 0, 3, 3, 1)
@@ -189,7 +189,7 @@ calibrateDirection = function()
   end
 end
 
-calibration = function()
+local function calibration()
   report('Calibrating...', states.CALIBRATING, false)
 
   -- Check for essential components --
@@ -229,12 +229,11 @@ calibration = function()
   report('Calibration completed', states.MINING, false)
 end
 
-main = function()
+local function main()
 
 end
 
 calibration()
-calibration = nil
 local Tau = computer.uptime()
 local pos = {0, 0, 0, [0] = 1} -- table for storing chunk coords
 
