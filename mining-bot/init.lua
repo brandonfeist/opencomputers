@@ -4,7 +4,7 @@ local robot = require('robot')
 local sides = require('sides')
 local serialization = require('serialization')
 
-local states = {
+local STATES = {
   ERROR = "ERROR",
   CALIBRATING = "CALIBRATING",
   MINING = "MINING",
@@ -13,10 +13,23 @@ local states = {
   HOME = "HOME"
 }
 
+-- Takes an array and turns it into an associative array
+local function arrToTable(table)
+  for i = #table, 1, -1 do
+    table[table[i]], table[i] = true, nil
+  end
+end
+
 -- Configuration Variables --
 local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
+local whiteList = {'enderstorage:ender_storage'}
+local fragments = {'redstone', 'coal', 'dye', 'diamond', 'emerald'}
+local garbage = {'cobblestone','granite','diorite','andesite','marble','limestone','dirt','gravel','sand','stained_hardened_clay','sandstone','stone','grass','end_stone','hardened_clay','mossy_cobblestone','planks','fence','torch','nether_brick','nether_brick_fence','nether_brick_stairs','netherrack','soul_sand'}
+arrToTable(whiteList)
+arrToTable(fragments)
+arrToTable(garbage)
 
 -- Tracking Variables --
 local X, Y, Z, D, border = 0, 0, 0, 0
@@ -25,13 +38,6 @@ local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
 local energyLevel = 0
 local hasSolar = false
-
--- Takes an array and turns it into an associative array
-local function arrToTable(table)
-  for i = #table, 1, -1 do
-    table[table[i]], table[i] = true, nil
-  end
-end
 
 -- Add a component through proxy
 local function add_component(name)
@@ -50,6 +56,12 @@ local modem = add_component('modem')
 local inventorySize = robot.inventorySize()
 
 -- Functions --
+local function removePoint(point)
+  table.remove(TAGGED.x, point)
+  table.remove(TAGGED.y, point)
+  table.remove(TAGGED.z, point)
+end
+
 local function checkEnergyLevel()
   return computer.energy() / computer.maxEnergy()
 end
@@ -63,7 +75,7 @@ end
 
 local function report(message, state, stop)
   if stop then
-    state = states.ERROR
+    state = STATES.ERROR
   end
 
   if modem then
@@ -82,12 +94,11 @@ local function report(message, state, stop)
   end
 end
 
+local function check()
+
+end
+
 -- Solar charge function
-
--- Remove point from TAGGED
-
--- Turn function
--- Smart turn
 
 -- Go to specified coord
 
@@ -95,11 +106,9 @@ end
 
 -- Go home function
 
--- Check status
-
 -- Loot sorting?
 
-local function step(side, ignore)
+local function step(side, ignoreCheck)
   if side == sides.bottom then
     local swingSuccess, block = robot.swingDown()
     if not swingSuccess and block ~= 'air' and robot.detectDown() then
@@ -144,15 +153,35 @@ local function step(side, ignore)
       X = X + 1
     end
   else
-    report('Invalid step side given', states.ERROR, true)
+    report('Invalid step side given', STATES.ERROR, true)
     return false
   end
 
-  if not ignore then
-    checkStatus()
+  if not ignoreCheck then
+    check()
   end
 
   return true
+end
+
+local function turn(left)
+  left = left or false
+  if left then
+    robot.turnLeft()
+    D = (D - 1) % 4
+  else
+    robot.turnRight()
+    D = (D + 1) % 4
+  end
+
+  check()
+end
+
+-- Probably need a clear definition of what cardinal side is what
+local function smartTurn(cardinalSide)
+  while D ~= cardinalSide do
+    turn((cardinalSide - D) % 4 == 1)
+  end
 end
 
 local function calibrateEnergyUse()
@@ -173,14 +202,14 @@ end
 local function calibrateDirection()
   local cardinalPoints = {2, 1, 3, 0}
   D = nil
-  for s = 1, #sides do
+  for s = 1, #cardinalPoints do
     if robot.detect() or robot.place() then
       local A = geolyzer.scan(-1, -1, 0, 3, 3, 1)
       robot.swing()
       local B = geolyzer.scan(-1, -1, 0, 3, 3, 1)
       for n = 2, 8, 2 do
         if math.ceil(B[n]) - math.ceil(A[n]) < 0 then -- if the block disappeared
-          D = sides[n / 2]
+          D = cardinalPoints[n / 2]
           break
         end
       end
@@ -189,22 +218,22 @@ local function calibrateDirection()
     end
   end
   if not D then
-    report('Direction calibration error', states.ERROR, true)
+    report('Direction calibration error', STATES.ERROR, true)
   end
 end
 
 local function calibration()
-  report('Calibrating...', states.CALIBRATING, false)
+  report('Calibrating...', STATES.CALIBRATING, false)
 
   -- Check for essential components --
   if not controller then
-    report('Inventory controller not detected', states.ERROR, true)
+    report('Inventory controller not detected', STATES.ERROR, true)
   elseif not geolyzer then
-    report('Geolyzer not detected', states.ERROR, true)
+    report('Geolyzer not detected', STATES.ERROR, true)
   elseif not robot.detectDown() then
-    report('Bottom solid block is not detected', states.ERROR, true)
+    report('Bottom solid block is not detected', STATES.ERROR, true)
   elseif robot.durability() == nil then
-    report('There is no suitable tool in the manipulator', states.ERROR, true)
+    report('There is no suitable tool in the manipulator', STATES.ERROR, true)
   end
 
   -- Check and set solar and modem --
@@ -230,7 +259,7 @@ local function calibration()
   calibrateWearRate()
   calibrateDirection()
 
-  report('Calibration completed', states.MINING, false)
+  report('Calibration completed', STATES.MINING, false)
 end
 
 local function main()
