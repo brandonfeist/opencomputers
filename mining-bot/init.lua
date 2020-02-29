@@ -25,10 +25,10 @@ local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
 local whiteList = {'enderstorage:ender_storage'}
-local fragments = {'redstone', 'coal', 'dye', 'diamond', 'emerald'}
+local itemsToKeep = {'redstone', 'coal', 'dye', 'diamond', 'emerald'}
 local garbage = {'cobblestone','granite','diorite','andesite','marble','limestone','dirt','gravel','sand','stained_hardened_clay','sandstone','stone','grass','end_stone','hardened_clay','mossy_cobblestone','planks','fence','torch','nether_brick','nether_brick_fence','nether_brick_stairs','netherrack','soul_sand'}
 arrToTable(whiteList)
-arrToTable(fragments)
+arrToTable(itemsToKeep)
 arrToTable(garbage)
 
 -- Tracking Variables --
@@ -48,7 +48,7 @@ local function add_component(name)
 end
 
 -- Component Loading --
-local controller = add_component('inventory_controller')
+local inventoryController = add_component('inventory_controller')
 local generator = add_component('generator')
 local crafting = add_component('crafting')
 local geolyzer = add_component('geolyzer')
@@ -96,6 +96,79 @@ end
 
 local function check()
 
+end
+
+local function chargeSolar()
+
+end
+
+local function go(x, y, z)
+
+end
+
+local function scan(xx, zz)
+
+end
+
+local function goHome()
+
+end
+
+local function sort(forcePackItems)
+  -- Make room to drop trash
+  robot.swingDown()
+  robot.swingUp()
+
+  -- Dump garabge items and track items to keep
+  local numEmptySlots, available = 0, {}
+  for slot = 1, inventorySize do
+    local item = inventoryController.getStackInInternalSlot(slot)
+    if item then
+      local name = item.name:gsub('%g+:', '')
+      if garbage[name] then
+        robot.select(slot)
+        robot.dropDown()
+        numEmptySlots = numEmptySlots + 1
+      elseif itemsToKeep[name] then
+        if available[name] then -- check if this item has already been seen
+          available[name] = available[name] + item.size
+        else
+          available[name] = item.size
+        end
+      end
+    else
+      numEmptySlots = numEmptySlots + 1
+    end
+  end
+
+  -- Pack items into blocks
+  if crafting and (numEmptySlots < 12 or forcePackItems) then
+    -- Transfer excess items to the buffer if not enough room for workbench
+    if numEmptySlots < 10 then
+      numEmptySlots = 10 - numEmptySlots -- Num of slots to empty to get to 10 empty slots
+      for slot = 1, inventorySize do
+        local item = inventoryController.getStackInInternalSlot(slot)
+        if item then
+          if not whiteList[item.name] then
+            local name = item.name:gsub('%g+:', '')
+            if available[name] then
+              available[name] = available[name] - item.size
+            end
+
+            robot.select(slot)
+            robot.dropUp()
+            numEmptySlots = numEmptySlots - 1
+          end
+        end
+        if numEmptySlots == 0 then
+          break
+        end
+      end
+    end
+
+    -- Crafting items to pack them
+    
+  end
 end
 
 -- Solar charge function
@@ -164,14 +237,14 @@ local function step(side, ignoreCheck)
   return true
 end
 
-local function turn(left)
-  left = left or false
-  if left then
-    robot.turnLeft()
-    D = (D - 1) % 4
-  else
+local function turn(clockwise)
+  clockwise = clockwise or false
+  if clockwise then
     robot.turnRight()
     D = (D + 1) % 4
+  else
+    robot.turnLeft()
+    D = (D - 1) % 4
   end
 
   check()
@@ -226,7 +299,7 @@ local function calibration()
   report('Calibrating...', STATES.CALIBRATING, false)
 
   -- Check for essential components --
-  if not controller then
+  if not inventoryController then
     report('Inventory controller not detected', STATES.ERROR, true)
   elseif not geolyzer then
     report('Geolyzer not detected', STATES.ERROR, true)
