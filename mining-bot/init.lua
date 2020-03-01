@@ -8,6 +8,7 @@ local STATES = {
   ERROR = "ERROR",
   CALIBRATING = "CALIBRATING",
   MINING = "MINING",
+  REFUELING = "REFUELING",
   SOLAR = "SOLAR",
   GO_HOME = "GO_HOME",
   HOME = "HOME"
@@ -24,6 +25,7 @@ end
 local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
+local workbenchArea = {1, 2, 3, 5, 6, 7, 9, 10, 11}
 local whiteList = {'enderstorage:ender_storage'}
 local itemsToKeep = {'redstone', 'coal', 'dye', 'diamond', 'emerald'}
 local garbage = {'cobblestone','granite','diorite','andesite','marble','limestone','dirt','gravel','sand','stained_hardened_clay','sandstone','stone','grass','end_stone','hardened_clay','mossy_cobblestone','planks','fence','torch','nether_brick','nether_brick_fence','nether_brick_stairs','netherrack','soul_sand'}
@@ -37,6 +39,7 @@ local steps, turns = 0, 0
 local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
 local energyLevel = 0
+local ignoreCheck = false
 local hasSolar = false
 
 -- Add a component through proxy
@@ -94,12 +97,73 @@ local function report(message, state, stop)
   end
 end
 
-local function check()
+local function inventoryCheck()
+  if ignoreCheck then
+    return
+  end
+  local items = 0
+  for slot = 1, inventorySize do
+    if robot.count(slot) > 0 then
+      items = items + 1
+    end
+  end
+  if inventorySize - items < 10 or items / inventorySize > 0.9 then
+    while robot.suckUp() do end
+    goHome(true)
+  end
+end
 
+local function goHome(forced, interrupt)
+
+end
+
+local function chargeGenerator()
+  report('Refueling solid fuel generators', STATES.REFUELING)
+  for slot = 1, inventorySize do
+    robot.select(slot)
+    generator.insert()
+  end
 end
 
 local function chargeSolar()
 
+end
+
+local function checkLocalBlocksAndMine()
+  if #TAGGED.x ~= 0 then
+    for i = 1, #TAGGED.x do
+      
+    end
+  end
+end
+
+local function check(forced)
+  if not ignoreCheck and (steps % 32 == 0 or forced) then
+    inventoryCheck()
+    local distanceDelta = math.abs(X) + math.abs(Y) + math.abs(Z) + 64
+    if robot.durability() / wearRate < distanceDelta then
+      report('Tool is worn', STATES.GO_HOME)
+      ignoreCheck = true
+      goHome(true)
+    end
+
+    if distanceDelta * energyRate > computer.energy() then
+      report('Battery level is low', STATES.GO_HOME)
+      ignoreCheck = true
+      goHome(true)
+    end
+
+    if checkEnergyLevel() < 0.3 then -- Energy less than 30%
+      local time = os.date('*t')
+      if generator and generator.count() == 0 and not forced then
+        chargeGenerator()
+      elseif hasSolar and (time.hour > 4 and time.hour < 17) then
+        chargeSolar()
+      end
+    end
+  end
+
+  checkLocalBlocksAndMine()
 end
 
 local function go(x, y, z)
@@ -107,10 +171,6 @@ local function go(x, y, z)
 end
 
 local function scan(xx, zz)
-
-end
-
-local function goHome()
 
 end
 
@@ -167,8 +227,70 @@ local function sort(forcePackItems)
     end
 
     -- Crafting items to pack them
-    
+    for itemName, itemAmnt in pairs(available) do
+      if itemAmnt > 8 then
+        for l = 1, math.ceil(itemAmnt / 576) do
+          inventoryCheck()
+          -- Cleaning work area --
+          for i = 1, 9 do
+            if robot.count(workbenchArea[i]) > 0 then
+              robot.select(workbenchArea[i])
+              -- brute force invenotry and ignore workbench slots
+              for slot = 4, inventorySize do
+                if slot == 4 or slot == 8 or slot > 11 then
+                  robot.transferTo(slot)
+                  if robot.count(slot) == 0 then
+                    break
+                  end
+                end
+              end
+              -- If overload detected pack up from buffer
+              if robot.count() > 0 then
+                while robot.suckUp() do end
+                return
+              end
+            end
+          end
+          -- Fragment search looping
+          for slot = 4, inventorySize do
+            local item = inventoryController.getStackInInternalSlot(slot)
+            if item and (slot == 4 or slot == 8 or slot > 11) then
+              -- If items match
+              if itemName == item.name:gsub('%g+:', '') then
+                robot.select(slot)
+                for n = 1, 10 do
+                  robot.transferTo(workbenchArea[n % 9 + 1], item.size / 9)
+                end
+                -- reset when filling the workbench
+                if robot.count(1) == 64 then
+                  break
+                end
+              end
+            end
+          end
+          robot.select(inventorySize) -- select last slot
+          crafting.craft()
+          -- Consolidate same items into same slots
+          for slotA = 1, inventorySize do
+            local size = robot.count(slotA)
+            if size > 0 and size < 64 then
+              for slotB = A + 1, inventorySize do
+                if robot.compareTo(slotB) then
+                  robot.select(slotA)
+                  robot.transferTo(B, 64 - robot.count(slotB))
+                end
+                if robot.count() == 0 then
+                  break
+                end
+              end
+            end
+          end
+        end
+      end
+    end
   end
+  while robot.suckUp() do end
+  inventoryCheck()
 end
 
 -- Solar charge function
