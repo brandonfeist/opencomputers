@@ -10,6 +10,7 @@ local STATES = {
   MINING = "MINING",
   REFUELING = "REFUELING",
   SOLAR = "SOLAR",
+  CHARGING_HOME = "CHARGING_HOME",
   GO_HOME = "GO_HOME",
   HOME = "HOME"
 }
@@ -25,7 +26,6 @@ end
 local chunks = 3
 local minDensity, maxDensity = 2.2, 40
 local port = 80
-local workbenchArea = {1, 2, 3, 5, 6, 7, 9, 10, 11}
 local whiteList = {'enderstorage:ender_storage'}
 local itemsToKeep = {'redstone', 'coal', 'dye', 'diamond', 'emerald'}
 local garbage = {'cobblestone','granite','diorite','andesite','marble','limestone','dirt','gravel','sand','stained_hardened_clay','sandstone','stone','grass','end_stone','hardened_clay','mossy_cobblestone','planks','fence','torch','nether_brick','nether_brick_fence','nether_brick_stairs','netherrack','soul_sand'}
@@ -34,11 +34,12 @@ arrToTable(itemsToKeep)
 arrToTable(garbage)
 
 -- Tracking Variables --
+local workbenchArea = {1, 2, 3, 5, 6, 7, 9, 10, 11}
+local quads = {{-7, -7}, {-7, 1}, {1, -7}, {1, 1}}
 local X, Y, Z, D, border = 0, 0, 0, 0
 local steps, turns = 0, 0
 local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
-local energyLevel = 0
 local ignoreCheck = false
 local hasSolar = false
 
@@ -109,12 +110,131 @@ local function inventoryCheck()
   end
   if inventorySize - items < 10 or items / inventorySize > 0.9 then
     while robot.suckUp() do end
+    report('Inventory full, going home', STATES.GO_HOME, false)
     goHome(true)
   end
 end
 
-local function goHome(forced, interrupt)
+local function goHome(forceGoHome, interrupt)
+  local x, y, z, d
+  ignoreCheck = true
+  local enderChest
+  for slot = 1, inventorySize do
+    local item = inventoryController.getStackInInternalSlot(slot)
+    if item then
+      if item.name == 'enderstorage:ender_storage' then
+        enderChest = slot
+        break
+      end
+    end
+  end
+  if enderChest and not forceGoHome then
+    robot.swing()
+    robot.select(enderChest)
+    robot.place(sides.front)
+  else
+    x, y, z, d = X, Y, Z, D
+    go(0, -2, 0)
+    go(0, 0, 0)
+  end
+  report('Home safe', STATES.HOME, false)
 
+  sort()
+  local externalInvSize = nil
+  while true do
+    for side = 1, 4 do
+      externalInvSize = inventoryController.getInventorySize(sides.front)
+      if externalInvSize and externalInvSize > 26 then
+        break
+      end
+      turn()
+    end
+    if not externalInvSize or externalInvSize < 26 then
+      report('Container not found, or chest full', STATES.ERROR, true)
+    else
+      break
+    end
+  end
+  for slot = 1, inventorySize do
+    local item = inventoryController.getStackInInternalSlot(slot)
+    if item then
+      if not whiteList[item.name] then
+        robot.select(slot)
+        local dropSuccess, dropErrMsg = robot.drop()
+        if not dropSuccess and dropErrMsg == 'inventory full' then
+          report('Container is full, please empty', STATES.ERROR, true)
+        end
+      end
+    end
+  end
+
+  if crafting then
+    for slot = 1, externalInvSize do
+      local item = inventoryController.getStackInSlot(sides.front, slot)
+      if item then
+        if itemsToKeep[item.name:gsub('%g+', '')] then
+          inventoryController.suckFromSlot(sides.front, slot)
+        end
+      end
+    end
+    sort(true)
+    for slot = 1, inventorySize do
+      local item = inventoryController.getStackInInternalSlot(slot)
+      if item then
+        if not whiteList[item.name] then
+          robot.select(slot)
+          robot.drop()
+        end
+      end
+    end
+  end
+
+  if generator and not forceGoHome then
+    for slot = 1, externalInvSize do
+      local item = inventoryController.getStackInSlot(sides.front, slot);
+      if item then
+        if item.name:sub(11, 15) == 'coal' then
+          inventoryController.suckFromSlot(sides.front, slot)
+          break
+        end
+      end
+    end
+  end
+
+  if forceGoHome then
+    if robot.durability() < 0.3 then
+      robot.select(1)
+      inventoryController.equip()
+      local tool = inventoryController.getStackInInternalSlot(1)
+      for slot = 1, externalInvSize do
+        local item = inventoryController.getStackInSlot(sides.front, slot)
+        if item then
+          if item.name == tool.name and item.damage < tool.damage then
+            robot.drop()
+            inventoryController.suckFromSlot(sides.front, slot)
+            break
+          end
+        end
+      end
+      inventoryController.equip()
+    end
+  end
+
+  if enderChest and not forceGoHome then
+    robot.swing() -- Picks up chest
+  else
+    while checkEnergyLevel() < 0.98 do
+      report('Charging', STATES.CHARGING_HOME, false)
+      sleep(30)
+    end
+  end
+  ignoreCheck = nil
+  if not interrupt then
+    report('Returning to work', STATES.MINING, false)
+    go(0, -2, 0)
+    go(x, y, z)
+    smartTurn(d)
+  end
 end
 
 local function chargeGenerator()
@@ -123,16 +243,40 @@ local function chargeGenerator()
     robot.select(slot)
     generator.insert()
   end
+  report('Returing to work', STATES.MINING, false)
 end
 
 local function chargeSolar()
-
+  while not geolyzer.isSunVisible() and step(sides.top, true) do end
+  report('Re-charging in the sun', STATES.SOLAR, false)
+  sort(true)
+  while (checkEnergyLevel() < 0.98) and geolyzer.isSunVisible() do
+    local time = os.date('*t')
+    if time.hour >= 5 and time.hour < 19 then
+      sleep(60)
+    else
+      break
+    end
+  end
+  report('Returing to work', STATES.MINING, false)
 end
 
 local function checkLocalBlocksAndMine()
   if #TAGGED.x ~= 0 then
     for i = 1, #TAGGED.x do
-      
+      if TAGGED.y[i] == Y and ((TAGGED.x[i] == X and ((TAGGED.z[i] == Z+1 and D == 0) or (TAGGED.z[i] == Z-1 and D == 2))) or (TAGGED.z[i] == Z and ((TAGGED.x[i] == X+1 and D == 3) or (TAGGED.x[i] == X-1 and D == 1)))) then
+        robot.swing()
+        removePoint(i)
+      end
+
+      if X == TAGGED.x[i] and (Y-1 <= TAGGED.y[i] and Y+1 >= TAGGED.y[i]) and Z == TAGGED.z[i] then
+        if TAGGED.y[i] == Y+1 then
+          robot.swingUp()
+        elseif TAGGED.y[i] == Y-1 then
+          robot.swingDown()
+        end
+        removePoint(i)
+      end
     end
   end
 end
@@ -142,13 +286,13 @@ local function check(forced)
     inventoryCheck()
     local distanceDelta = math.abs(X) + math.abs(Y) + math.abs(Z) + 64
     if robot.durability() / wearRate < distanceDelta then
-      report('Tool is worn', STATES.GO_HOME)
+      report('Tool is worn', STATES.GO_HOME, false)
       ignoreCheck = true
       goHome(true)
     end
 
     if distanceDelta * energyRate > computer.energy() then
-      report('Battery level is low', STATES.GO_HOME)
+      report('Battery level is low', STATES.GO_HOME, false)
       ignoreCheck = true
       goHome(true)
     end
@@ -167,11 +311,51 @@ local function check(forced)
 end
 
 local function go(x, y, z)
+  if border and y < border then
+    y = border
+  end
 
+  while Y ~= y do
+    if Y < y then
+      step(sides.top)
+    elseif Y > y then
+      step(sides.bottom)
+    end
+  end
+
+  if X < x then
+    smartTurn(3)
+  elseif X > x then
+    smartTurn(1)
+  end
+  while X ~= x do
+    step(sides.front)
+  end
+
+  if Z < z then
+    smartTurn(0)
+  elseif Z > z then
+    smartTurn(2)
+  end
+  while Z ~= z do
+    step(sides.front)
+  end
 end
 
 local function scan(xx, zz)
-
+  local raw, index = geolyzer.scan(xx, zz, -1, 8, 8, 1), 1
+  for z = zz, zz + 7 do
+    for x = xx, xx + 7 do
+      if raw[index] >= minDensity and raw[index] <= maxDensity then
+        table.insert(TAGGED.x, X + x)
+        table.insert(TAGGED.y, Y - 1)
+        table.insert(TAGGED.z, Z + z)
+      elseif raw[index] < -0.31 then
+        border = Y
+      end
+      index = index + 1
+    end
+  end
 end
 
 local function sort(forcePackItems)
@@ -274,10 +458,10 @@ local function sort(forcePackItems)
           for slotA = 1, inventorySize do
             local size = robot.count(slotA)
             if size > 0 and size < 64 then
-              for slotB = A + 1, inventorySize do
+              for slotB = slotA + 1, inventorySize do
                 if robot.compareTo(slotB) then
                   robot.select(slotA)
-                  robot.transferTo(B, 64 - robot.count(slotB))
+                  robot.transferTo(slotB, 64 - robot.count(slotB))
                 end
                 if robot.count() == 0 then
                   break
@@ -292,16 +476,6 @@ local function sort(forcePackItems)
   while robot.suckUp() do end
   inventoryCheck()
 end
-
--- Solar charge function
-
--- Go to specified coord
-
--- Scan function
-
--- Go home function
-
--- Loot sorting?
 
 local function step(side, ignoreCheck)
   if side == sides.bottom then
@@ -458,10 +632,62 @@ local function calibration()
 end
 
 local function main()
-
+  border = nil
+  while not border do
+    step(sides.bottom)
+    for q = 1, 4 do
+      scan(table.unpack(quads[q]))
+    end
+    check(true)
+  end
+  while #TAGGED.x ~= 0 do
+    local nDelta, cDelta, current = math.huge, math.huge
+    for index = 1, #TAGGED.x do
+      nDelta = math.abs(X - TAGGED.x[index]) + math.abs(Y - TAGGED.y[index]) + math.abs(Z - TAGGED.z[index]) - border + TAGGED.y[index]
+      if (TAGGED.x[index] > X and D ~= 3) or
+      (TAGGED.x[index] < X and D ~= 1) or
+      (TAGGED.z[index] > Z and D ~= 0) or
+      (TAGGED.z[index] < Z and D ~= 2) then
+        nDelta = nDelta + 1
+      end
+      if nDelta < cDelta then
+        cDelta, current = nDelta, index
+      end
+    end
+    if TAGGED.x[current] == X and TAGGED.y[current] == Y and TAGGED.z[current] == Z then
+      removePoint(current)
+    else
+      local yc = TAGGED.y[current]
+      if yc-1 > Y then
+        yc = yc-1
+      elseif yc+1 < Y then
+        yc = yc+1
+      end
+      go(TAGGED.x[current], yc, TAGGED.z[current])
+    end
+  end
+  sort()
 end
 
 calibration()
 local Tau = computer.uptime()
-local pos = {0, 0, 0, [0] = 1} -- table for storing chunk coords
-
+local chunkCoords = {0, 0, 0, [0] = 1}
+for o = 1, 10 do
+  for i = 1, 2 do
+    for a = 1, o do
+      main()
+      report('Chunk #'..(chunkCoords[3] + 1)..' processed', STATES.MINING, false)
+      chunkCoords[i], chunkCoords[3] = chunkCoords[i] + chunkCoords[0], chunkCoords[3] + 1
+      if chunkCoords[3] == chunks then -- last chunk reached
+        report('Max chunks mined', STATES.GO_HOME, false)
+        goHome(true, true)
+        report(computer.uptime() - Tau..'seconds\nsteps: '..steps..'\nturns: '..turns, STATES.MINING, false)
+      else
+        TAGGED = {x = {}, y = {}, z = {}}
+        go(chunkCoords[1] * 16, -2, chunkCoords[2] * 16) -- go to next chunk
+        go(X, 0, Z) -- go to scan start point
+      end
+    end
+  end
+  chunkCoords[0] = 0 - chunkCoords[0]
+end
