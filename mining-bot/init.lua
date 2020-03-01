@@ -1,8 +1,8 @@
-local component = require "component"
-local computer = require "computer"
-local robot = require "robot"
-local sides = require "sides"
-local serialization = require "serialization"
+--local component = require("component") -- Note to self, require only works in OpenOS, not LUA EEPROM
+--local computer = require("computer")
+--local robot = require("robot")
+--local sides = require("sides")
+--local serialization = require("serialization")
 
 local STATES = {
   ERROR = "ERROR",
@@ -13,6 +13,15 @@ local STATES = {
   CHARGING_HOME = "CHARGING_HOME",
   GO_HOME = "GO_HOME",
   HOME = "HOME"
+}
+
+local sides = {
+  bottom = 0,
+  top = 1,
+  back = 2,
+  front = 3,
+  right = 4,
+  left = 5
 }
 
 -- Takes an array and turns it into an associative array
@@ -61,6 +70,7 @@ local generator = add_component('generator')
 local crafting = add_component('crafting')
 local geolyzer = add_component('geolyzer')
 local modem = add_component('modem')
+local robot = add_component('robot')
 local inventorySize = robot.inventorySize()
 
 -- Functions --
