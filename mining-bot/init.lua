@@ -1,8 +1,8 @@
---local component = require("component")
---local computer = require("computer")
---local robot = require("robot")
---local sides = require("sides")
---local serialization = require("serialization")
+local component = require "component"
+local computer = require "computer"
+local robot = require "robot"
+local sides = require "sides"
+local serialization = require "serialization"
 
 local STATES = {
   ERROR = "ERROR",
