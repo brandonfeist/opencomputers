@@ -2,7 +2,7 @@
 --local computer = require("computer")
 --local robot = require("robot")
 --local sides = require("sides")
---local serialization = require("serialization") -- please
+--local serialization = require("serialization")
 
 local STATES = {
   ERROR = "ERROR",
@@ -140,15 +140,15 @@ checkLocalBlocksAndMine = function()
   if #TAGGED.x ~= 0 then
     for i = 1, #TAGGED.x do
       if TAGGED.y[i] == Y and ((TAGGED.x[i] == X and ((TAGGED.z[i] == Z+1 and D == 0) or (TAGGED.z[i] == Z-1 and D == 2))) or (TAGGED.z[i] == Z and ((TAGGED.x[i] == X+1 and D == 3) or (TAGGED.x[i] == X-1 and D == 1)))) then
-        robot.swing()
+        robot.swing(sides.front)
         removePoint(i)
       end
 
       if X == TAGGED.x[i] and (Y-1 <= TAGGED.y[i] and Y+1 >= TAGGED.y[i]) and Z == TAGGED.z[i] then
         if TAGGED.y[i] == Y+1 then
-          robot.swingUp()
+          robot.swing(sides.top)
         elseif TAGGED.y[i] == Y-1 then
-          robot.swingDown()
+          robot.swing(sides.bottom)
         end
         removePoint(i)
       end
@@ -187,39 +187,39 @@ end
 
 step = function(side, stepIgnoreCheck)
   if side == sides.bottom then
-    local swingSuccess, block = robot.swingDown()
-    if not swingSuccess and block ~= 'air' and robot.detectDown() then
+    local swingSuccess, block = robot.swing(sides.bottom)
+    if not swingSuccess and block ~= 'air' and robot.detect(sides.bottom) then
       return false
     else
-      while robot.swingDown() do end
+      while robot.swing(sides.bottom) do end
     end
 
     steps = steps + 1
-    robot.down()
+    robot.move(sides.bottom)
     Y = Y - 1
   elseif side == sides.top then
-    local swingSuccess, block = robot.swingUp()
-    if not swingSuccess and block ~= 'air' and robot.detectUp() then
+    local swingSuccess, block = robot.swing(sides.top)
+    if not swingSuccess and block ~= 'air' and robot.detect(sides.top) then
       return false
     else
-      while robot.swingUp() do end
+      while robot.swing(sides.top) do end
     end
     steps = steps + 1
 
     steps = steps + 1
-    robot.up()
+    robot.move(sides.top)
     Y = Y + 1
   elseif side == sides.front then
-    local swingSuccess, block = robot.swing()
-    if not swingSuccess and block ~= 'air' and robot.detect() then
+    local swingSuccess, block = robot.swing(sides.front)
+    if not swingSuccess and block ~= 'air' and robot.detect(sides.front) then
       return false
     else
-      while robot.swing() do end
+      while robot.swing(sides.front) do end
     end
     steps = steps + 1
 
     steps = steps + 1
-    robot.forward()
+    robot.move(sides.front)
     if D == 0 then
       Z = Z + 1
     elseif D == 1 then
@@ -244,10 +244,10 @@ end
 turn = function(clockwise)
   clockwise = clockwise or false
   if clockwise then
-    robot.turnRight()
+    robot.turn(clockwise)
     D = (D + 1) % 4
   else
-    robot.turnLeft()
+    robot.turn(clockwise)
     D = (D - 1) % 4
   end
 
@@ -311,8 +311,8 @@ end
 
 sort = function(forcePackItems)
   -- Make room to drop trash
-  robot.swingDown()
-  robot.swingUp()
+  robot.swing(sides.bottom)
+  robot.swing(sides.top)
 
   -- Dump garabge items and track items to keep
   local numEmptySlots, available = 0, {}
@@ -322,7 +322,7 @@ sort = function(forcePackItems)
       local name = item.name:gsub('%g+:', '')
       if garbage[name] then
         robot.select(slot)
-        robot.dropDown()
+        robot.drop(sides.bottom)
         numEmptySlots = numEmptySlots + 1
       elseif itemsToKeep[name] then
         if available[name] then -- check if this item has already been seen
@@ -351,7 +351,7 @@ sort = function(forcePackItems)
             end
 
             robot.select(slot)
-            robot.dropUp()
+            robot.drop(sides.top)
             numEmptySlots = numEmptySlots - 1
           end
         end
@@ -381,7 +381,7 @@ sort = function(forcePackItems)
               end
               -- If overload detected pack up from buffer
               if robot.count() > 0 then
-                while robot.suckUp() do end
+                while robot.suck(sides.top) do end
                 return
               end
             end
@@ -424,7 +424,7 @@ sort = function(forcePackItems)
       end
     end
   end
-  while robot.suckUp() do end
+  while robot.suck(sides.top) do end
   inventoryCheck()
 end
 
@@ -442,7 +442,7 @@ goHome = function(forceGoHome, interrupt)
     end
   end
   if enderChest and not forceGoHome then
-    robot.swing()
+    robot.swing(sides.front)
     robot.select(enderChest)
     robot.place(sides.front)
   else
@@ -473,7 +473,7 @@ goHome = function(forceGoHome, interrupt)
     if item then
       if not whiteList[item.name] then
         robot.select(slot)
-        local dropSuccess, dropErrMsg = robot.drop()
+        local dropSuccess, dropErrMsg = robot.drop(sides.front)
         if not dropSuccess and dropErrMsg == 'inventory full' then
           report('Container is full, please empty', STATES.ERROR, true)
         end
@@ -496,7 +496,7 @@ goHome = function(forceGoHome, interrupt)
       if item then
         if not whiteList[item.name] then
           robot.select(slot)
-          robot.drop()
+          robot.drop(sides.front)
         end
       end
     end
@@ -523,7 +523,7 @@ goHome = function(forceGoHome, interrupt)
         local item = inventoryController.getStackInSlot(sides.front, slot)
         if item then
           if item.name == tool.name and item.damage < tool.damage then
-            robot.drop()
+            robot.drop(sides.front)
             inventoryController.suckFromSlot(sides.front, slot)
             break
           end
@@ -534,7 +534,7 @@ goHome = function(forceGoHome, interrupt)
   end
 
   if enderChest and not forceGoHome then
-    robot.swing() -- Picks up chest
+    robot.swing(sides.front) -- Picks up chest
   else
     while checkEnergyLevel() < 0.98 do
       report('Charging', STATES.CHARGING_HOME, false)
@@ -561,7 +561,7 @@ inventoryCheck = function()
     end
   end
   if inventorySize - items < 10 or items / inventorySize > 0.9 then
-    while robot.suckUp() do end
+    while robot.suck(sides.top) do end
     report('Inventory full, going home', STATES.GO_HOME, false)
     goHome(true)
   end
@@ -576,8 +576,8 @@ end
 calibrateWearRate = function()
   local itemDurability = robot.durability()
   while itemDurability == robot.durability() do
-    robot.place()
-    robot.swing()
+    robot.place(sides.front)
+    robot.swing(sides.front)
   end
   wearRate = itemDurability - robot.durability()
 end
@@ -586,9 +586,9 @@ calibrateDirection = function()
   local cardinalPoints = {2, 1, 3, 0}
   D = nil
   for s = 1, #cardinalPoints do
-    if robot.detect() or robot.place() then
+    if robot.detect(sides.front) or robot.place(sides.front) then
       local A = geolyzer.scan(-1, -1, 0, 3, 3, 1)
-      robot.swing()
+      robot.swing(sides.front)
       local B = geolyzer.scan(-1, -1, 0, 3, 3, 1)
       for n = 2, 8, 2 do
         if math.ceil(B[n]) - math.ceil(A[n]) < 0 then -- if the block disappeared
@@ -613,7 +613,7 @@ calibration = function()
     report('Inventory controller not detected', STATES.ERROR, true)
   elseif not geolyzer then
     report('Geolyzer not detected', STATES.ERROR, true)
-  elseif not robot.detectDown() then
+  elseif not robot.detect(sides.bottom) then
     report('Bottom solid block is not detected', STATES.ERROR, true)
   elseif robot.durability() == nil then
     report('There is no suitable tool in the manipulator', STATES.ERROR, true)
