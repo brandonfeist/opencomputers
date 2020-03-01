@@ -104,7 +104,7 @@ report = function(message, state, stop)
       energy = checkEnergyLevel(),
       timestamp = os.clock()
     }
-    modem.broadcast(port, serialization.serialize(stateTable))
+    modem.broadcast(port, message)
   end
   computer.beep()
   if stop then
