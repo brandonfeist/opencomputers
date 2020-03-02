@@ -189,7 +189,7 @@ check = function(forced)
 end
 
 step = function(side, stepIgnoreCheck)
-  if (steps % 32) == 0 then
+  if (steps % 8) == 0 then
     report('Location update...')
   end
 
