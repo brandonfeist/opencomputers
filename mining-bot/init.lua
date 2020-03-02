@@ -52,7 +52,7 @@ local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
 local ignoreCheck = false
 local hasSolar = false
-local globalState = state.HOME
+local globalState = STATES.HOME
 
 -- Global methods --
 local removePoint, checkEnergyLevel, sleep, report, chargeGenerator, chargeSolar, checkLocalBlocksAndMine, check, step, turn, smartTurn, go, scan, sort, goHome, inventoryCheck, calibrateEnergyUse, calibrateWearRate, calibrateDirection, calibration, main
