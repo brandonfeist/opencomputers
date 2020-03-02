@@ -304,7 +304,7 @@ scan = function(xx, zz)
   local raw, index = geolyzer.scan(xx, zz, -1, 8, 8, 1), 1
   for z = zz, zz + 7 do
     for x = xx, xx + 7 do
-      if raw[index] >= minDensity and raw[index] <= maxDensity then
+      if raw[index] >= minDensity and raw[index] <= maxDensity and Y <= 0 then
         table.insert(TAGGED.x, X + x)
         table.insert(TAGGED.y, Y - 1)
         table.insert(TAGGED.z, Z + z)
