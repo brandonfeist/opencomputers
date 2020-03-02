@@ -52,6 +52,7 @@ local TAGGED = {x = {}, y = {}, z= {}}
 local energyRate, wearRate = 0, 0
 local ignoreCheck = false
 local hasSolar = false
+local globalState = state.HOME
 
 -- Global methods --
 local removePoint, checkEnergyLevel, sleep, report, chargeGenerator, chargeSolar, checkLocalBlocksAndMine, check, step, turn, smartTurn, go, scan, sort, goHome, inventoryCheck, calibrateEnergyUse, calibrateWearRate, calibrateDirection, calibration, main
@@ -92,13 +93,15 @@ sleep = function(timeout)
 end
 
 report = function(message, state, stop)
-  if stop then
-    state = STATES.ERROR
+  if stop ~= nil and stop then
+    globalState = STATES.ERROR
+  elseif state ~= nil then
+    globalState = state
   end
 
   if modem then
     local stateTable = {
-      state = state,
+      state = globalState,
       position = X..', '..Y..', '..Z..': Direct: '..D,
       message = message,
       energy = checkEnergyLevel(),
@@ -186,6 +189,10 @@ check = function(forced)
 end
 
 step = function(side, stepIgnoreCheck)
+  if (steps % 32) == 0 then
+    report('Location update...')
+  end
+
   if side == sides.bottom then
     local swingSuccess, block = robot.swing(sides.bottom)
     if not swingSuccess and block ~= 'air' and robot.detect(sides.bottom) then
