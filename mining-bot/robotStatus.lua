@@ -1,4 +1,6 @@
-local component = require("component") -- Please work!!!!
+local component = require("component")
+local event = require("event")
+
 component.modem.open(80)
 while true do
     local e = {event.pull('modem_message')}
